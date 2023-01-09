@@ -1,6 +1,16 @@
+###############################################################
+# aws cloudformation deploy \
+#     --template-file apigw-terminal-app.template.yaml \
+#     --stack-name apigw-terminal-app \
+#     --profile <your-dev-profile> \
+#     --capabilities CAPABILITY_NAMED_IAM \
+#     --region us-east-1
+# aws cloudformation deploy --template-file apigw-terminal-app.template.yaml --stack-name apigw-terminal-app --capabilities CAPABILITY_NAMED_IAM --region us-east-1 --profile default
+###############################################################
+
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: Custom Terminal UI
+Description: Custom Terminal API Application
 
 Parameters:
   ApiGatewayStageName:
