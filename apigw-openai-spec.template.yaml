@@ -27,6 +27,78 @@ Globals:
         LOG_LEVEL: INFO
 
 Resources:
+  APIGatewayPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub iam-api-gateway-policy-${Stage}
+      Description: Policy attached to role used to deploy APIGW lambdas
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - execute-api:Invoke
+              #- execute-api:ManageConnections
+            Resource: !Sub "arn:${AWS::Partition}:execute-api:*:${AWS::AccountId}:*"
+
+  DynamoDBPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub iam-dynamodb-policy-${Stage}
+      Description: Policy attached to role used to deploy APIGW lambdas
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:BatchGetItem
+              - dynamodb:GetItem
+              - dynamodb:Query
+              - dynamodb:PutItem
+              - dynamodb:BatchWriteItem
+            Resource: !Sub "arn:${AWS::Partition}:dynamodb:*:${AWS::AccountId}:table/*"
+
+  CloudwatchLogsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub iam-cloudwatch-logs-policy-${Stage}
+      Description: Policy attached to role used to deploy APIGW lambdas
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:DescribeLogStreams
+              - logs:GetLogEvents
+              - logs:FilterLogEvents
+              - logs:DescribeLogGroups
+              - logs:CreateLogGroup
+            Resource: !Sub "arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:*"
+
+  LambdaExecutionRole:
+    DependsOn:
+      - APIGatewayPolicy
+      - DynamoDBPolicy
+      - CloudwatchLogsPolicy
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: iam-lambda-basic-execution-role-${Stage}
+      ManagedPolicyArns:
+        - !Ref APIGatewayPolicy
+        - !Ref DynamoDBPolicy
+        - !Ref CloudwatchLogsPolicy
+      Description: Role used to deploy APIGW lambdas
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+
+
   LoggingBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -49,7 +121,7 @@ Resources:
 
   LexLambda:
     DependsOn:
-
+      - LambdaExecutionRole
     Type: AWS::Serverless::Function
     Properties:
       Description: Lambda for LexBot configured to work with terminal ui app
