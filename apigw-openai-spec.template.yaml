@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Custom Terminal UI
+
+Parameters:
+  ApiGatewayStageName:
+    Type: String
+    Description: The name used for the API Gateway Stage - the first part of the path.
+    Default: terminal
+  Stage:
+    Type: String
+    Description: environment
+    Default: dev
+  Bucket_Name:
+    Type: String
+    Description: Name of S3 bucket which stores frontend files
+  Bucket_Key:
+    Type: String
+    Description: Name of S3 file that renders site
+
+Globals:
+  Function:
+    Timeout: 5
+    Runtime: python3.9
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+
+Resources:
+  LoggingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: LogDeliveryWrite
+      BucketName: !Sub "${Bucket_Name}-Logging"
+
+  WebsiteBucket:
+    DependsOn:
+      - LoggingBucket
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LoggingBucket
+      BucketName: !Sub ${Bucket_Name}
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        #ErrorDocument: error.html
+      DeletionPolicy: Retain
+
+  LexLambda:
+    DependsOn:
+
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Lambda for LexBot configured to work with terminal ui app
+      FunctionName: Lex-Terminal-Bot
+      CodeUri: ./functons/Lex-Terimanl-Bot
+      Handler: main.lambda_handler
+      Role: !Sub arn:aws:iam::${AccountId}:role/iam-lambda-basic-execution-role-${Stage}
+
+  ApiGateway:
+    DependsOn:
+      - WebsiteBucket
+      - LexLambda
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub apigateway-custom-terminal-${Stage}
+      Description: Host custom terminal UI and its APIs
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Mode: overwrite
+      BinaryMediaTypes:
+       - "*~1*"
+      Body:
+        openapi: "3.1.0"
+        info:
+          version: "1.0"
+          title: !Ref AWS::StackName
+        paths:
+          "/":
+            get:
+              responses:
+                "200":
+                  description: "200 response"
+                  headers:
+                    Content-Length:
+                      type: string
+                    Content-Type:
+                      type: string
+              x-amazon-apigateway-integration:
+                type: aws
+                httpMethod: GET
+                passthroughBehavior: "when_no_match"
+                credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/apiGW-custom-terinal-access-${Stage}"
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:s3:path/${Bucket_Name}/${Bucket_Key}"
+                responses:
+                  default:
+                    statusCode: "200"
+                    responseParameters:
+                      method.response.header.Content-Type: "integration.response.header.Content-Type"
+                      method.response.header.Content-Length: "integration.response.header.Content-Length"
+          "/lex":
+            get:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub arn:aws:apigateway:${AWS::REGION}:lambda:path/2015-03-31/functions/${LexLambda.Arn}/invocations
+              responses: {}
+
+  # API Gateway Deployment
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref ApiGateway
+      StageName: !Ref ApiGatewayStageName
+
+  ApiGatewayStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId: !Ref ApiGatewayDeployment
+      RestApiId: !Ref ApiGateway
+      StageName: !Ref ApiGatewayStageName
+
+  # API Gateway permissions
+  LexLambdaPermissions:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      FunctionName: !GetAtt LexLambda.Arn
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/${ApiGatewayStageName}/GET/lex
+
+
+
+
+
+Outputs:
+  WebsiteURL:
+    Value: !GetAtt WebsiteBucket.WebsiteURL
