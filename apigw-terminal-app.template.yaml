@@ -40,6 +40,20 @@ Globals:
         LOG_LEVEL: INFO
 
 Resources:
+
+  S3TerminalBucketPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub iam-s3-bucket-policy-${Stage}
+      Description: !Sub "Policy to fetch objects from the ${Bucket_Name} bucket"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Alow
+            Action:
+              - s3:GetObject
+            Resource: !Sub "arn:${AWS::Partition}:s3:::${Bucket_Name}/*"
+
   APIGatewayPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -51,7 +65,6 @@ Resources:
           - Effect: Allow
             Action:
               - execute-api:Invoke
-              #- execute-api:ManageConnections
             Resource: !Sub "arn:${AWS::Partition}:execute-api:*:${AWS::AccountId}:*"
 
   DynamoDBPolicy:
@@ -93,14 +106,16 @@ Resources:
       - APIGatewayPolicy
       - DynamoDBPolicy
       - CloudwatchLogsPolicy
+      - S3TerminalBucketPolicy
     Type: AWS::IAM::Role
     Properties:
+      Description: Role used to deploy APIGW lambdas
       RoleName: iam-lambda-basic-execution-role-${Stage}
       ManagedPolicyArns:
         - !Ref APIGatewayPolicy
         - !Ref DynamoDBPolicy
         - !Ref CloudwatchLogsPolicy
-      Description: Role used to deploy APIGW lambdas
+        - !Ref S3TerminalBucketPolicy
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -109,6 +124,26 @@ Resources:
               Service: lambda.amazonaws.com
             Action:
               - sts:AssumeRole
+
+    ApiGatewayRole:
+      DependsOn:
+        - CloudwatchLogsPolicy
+        - S3TerminalBucketPolicy
+      Type: AWS::IAM::Role
+      Properties:
+        Description: Role for Api Gateway
+        RoleName: !Sub "iam-apigw-terminal-app-${Stage}"
+        ManagedPolicyArns:
+          - CloudwatchLogsPolicy
+          - S3TerminalBucketPolicy
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: apigateway.amazonaws.com
+              Action:
+                - sts:AssumeRole
 
   LoggingBucket:
     Type: AWS::S3::Bucket
@@ -205,7 +240,7 @@ Resources:
                 type: aws
                 httpMethod: GET
                 passthroughBehavior: "when_no_match"
-                credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/apiGW-custom-terinal-access-${Stage}"
+                credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}"
                 uri: !Sub "arn:aws:apigateway:${AWS::Region}:s3:path/${Bucket_Name}/${Bucket_Key}"
                 responses:
                   default:
@@ -243,10 +278,6 @@ Resources:
       Principal: apigateway.amazonaws.com
       FunctionName: !GetAtt LexLambda.Arn
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/${ApiGatewayStageName}/GET/lex
-
-
-
-
 
 Outputs:
   WebsiteURL:
