@@ -130,6 +130,24 @@ Resources:
         #ErrorDocument: error.html
       DeletionPolicy: Retain
 
+  #SampleBucketPolicy:
+  #  Type: AWS::S3::BucketPolicy
+  #  Properties:
+  #    Bucket: !Ref WebsiteBucket
+  #    PolicyDocument:
+  #      Version: "2012-10-17"
+  #      Statement:
+  #        - Action:
+  #          - s3:GetObject
+  #          Effect: Allow
+  #          Resource: !Sub "arn:aws:s3:::${WebsiteBucket}/*"
+  #          Principal: "*"
+  #          Condition:
+  #            StringLike:
+  #              "aws:Referer":
+  #                - "http://example.com/*"
+  #                - "http://example.net/*"
+
   LexLambda:
     DependsOn:
       - LambdaExecutionRole
@@ -137,7 +155,7 @@ Resources:
     Properties:
       Description: Lambda for LexBot configured to work with terminal ui app
       FunctionName: Lex-Terminal-Bot
-      CodeUri: ./functons/Lex-Terimanl-Bot
+      CodeUri: ./functons/Lex-Terminal-Bot
       Handler: main.lambda_handler
       Role: !Sub arn:aws:iam::${AccountId}:role/iam-lambda-basic-execution-role-${Stage}
 

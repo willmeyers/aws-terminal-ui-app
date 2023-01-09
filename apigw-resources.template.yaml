@@ -13,3 +13,5 @@ Parameters:
   Bucket_Name:
     Type: String
     Description: Name of S3 bucket which stores frontend files
+
+Resources:
