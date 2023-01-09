@@ -134,8 +134,8 @@ Resources:
         Description: Role for Api Gateway
         RoleName: !Sub "iam-apigw-terminal-app-${Stage}"
         ManagedPolicyArns:
-          - CloudwatchLogsPolicy
-          - S3TerminalBucketPolicy
+          - !Ref CloudwatchLogsPolicy
+          - !Ref S3TerminalBucketPolicy
         AssumeRolePolicyDocument:
           Version: "2012-10-17"
           Statement:
