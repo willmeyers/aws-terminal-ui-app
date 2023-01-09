@@ -27,6 +27,9 @@ Parameters:
   Bucket_Key:
     Type: String
     Description: Name of S3 file that renders site
+  DynamoTableName:
+    Type: String
+    Description: Name of DynamoDB Table
 
 Globals:
   Function:
@@ -107,8 +110,6 @@ Resources:
             Action:
               - sts:AssumeRole
 
-
-
   LoggingBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -139,6 +140,18 @@ Resources:
       CodeUri: ./functons/Lex-Terimanl-Bot
       Handler: main.lambda_handler
       Role: !Sub arn:aws:iam::${AccountId}:role/iam-lambda-basic-execution-role-${Stage}
+
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DynamoTableName
+      AttributeDefinitions:
+        - AttributeName: UserId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: UserId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
 
   ApiGateway:
     DependsOn:
