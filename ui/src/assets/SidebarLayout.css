@@ -1,0 +1,11 @@
+.SidebarLayout-root {
+    display: flex;
+    flex-direction: row;
+    height: 100vh;
+}
+
+.SidebarLayout-container {
+    background-color: #111216;
+    flex: 1;
+    padding: 8px
+}

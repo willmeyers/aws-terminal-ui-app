@@ -1,0 +1,27 @@
+.Sidebar-root {
+    display: flex;
+    flex-direction: column;
+    width: 256px;
+    padding: 8px;
+}
+
+.Sidebar-nav-root {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+    height: "100vh";
+}
+
+.Sidebar-nav-bottom {
+    position: absolute;
+    bottom: 0;
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+}
+
+.Sidebar-nav-root li {
+    padding: 12px
+}
