@@ -1,0 +1,267 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Custom Terminal API Application
+Parameters:
+  ApiGatewayStageName:
+    Type: String
+    Description: The name used for the API Gateway Stage - the first part of the path.
+    Default: terminal
+  Stage:
+    Type: String
+    Description: environment
+    Default: dev
+  BucketName:
+    Type: String
+    Description: Name of S3 bucket which stores frontend files
+  BucketKey:
+    Type: String
+    Description: Name of S3 file that renders site
+    Default: index.html
+  DynamoTableName:
+    Type: String
+    Description: Name of DynamoDB Table
+Globals:
+  Function:
+    Timeout: 5
+    Runtime: python3.9
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+Resources:
+  S3TerminalBucketPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName:
+        Fn::Sub: iam-s3-bucket-policy-${Stage}
+      Description:
+        Fn::Sub: Policy to fetch objects from the ${BucketKey} bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          Resource:
+            Fn::Sub: arn:${AWS::Partition}:s3:::${BucketName}/*
+  APIGatewayPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName:
+        Fn::Sub: iam-api-gateway-policy-${Stage}
+      Description: Policy attached to role used to deploy APIGW lambdas
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:Invoke
+          Resource:
+            Fn::Sub: arn:${AWS::Partition}:execute-api:*:${AWS::AccountId}:*
+  DynamoDBPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName:
+        Fn::Sub: iam-dynamodb-policy-${Stage}
+      Description: Policy attached to role used to deploy APIGW lambdas
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:GetItem
+          - dynamodb:Query
+          - dynamodb:PutItem
+          - dynamodb:BatchWriteItem
+          Resource:
+            Fn::Sub: arn:${AWS::Partition}:dynamodb:*:${AWS::AccountId}:table/*
+  CloudwatchLogsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName:
+        Fn::Sub: iam-cloudwatch-logs-policy-${Stage}
+      Description: Policy attached to role used to deploy APIGW lambdas
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - logs:DescribeLogStreams
+          - logs:GetLogEvents
+          - logs:FilterLogEvents
+          - logs:DescribeLogGroups
+          - logs:CreateLogGroup
+          Resource:
+            Fn::Sub: arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:*
+  LambdaExecutionRole:
+    DependsOn:
+    - APIGatewayPolicy
+    - DynamoDBPolicy
+    - CloudwatchLogsPolicy
+    - S3TerminalBucketPolicy
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Role used to deploy APIGW lambdas
+      RoleName:
+        Fn::Sub: iam-lambda-basic-execution-role-${Stage}
+      ManagedPolicyArns:
+      - Ref: APIGatewayPolicy
+      - Ref: DynamoDBPolicy
+      - Ref: CloudwatchLogsPolicy
+      - Ref: S3TerminalBucketPolicy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+  ApiGatewayRole:
+    DependsOn:
+    - CloudwatchLogsPolicy
+    - S3TerminalBucketPolicy
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Role for Api Gateway
+      RoleName:
+        Fn::Sub: iam-apigw-terminal-app-${Stage}
+      ManagedPolicyArns:
+      - Ref: CloudwatchLogsPolicy
+      - Ref: S3TerminalBucketPolicy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: apigateway.amazonaws.com
+          Action:
+          - sts:AssumeRole
+  LoggingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: LogDeliveryWrite
+      BucketName:
+        Fn::Sub: ${BucketName}-logging
+  WebsiteBucket:
+    DependsOn:
+    - LoggingBucket
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      AccessControl: PublicRead
+      LoggingConfiguration:
+        DestinationBucketName:
+          Ref: LoggingBucket
+      BucketName:
+        Fn::Sub: ${BucketName}
+      WebsiteConfiguration:
+        IndexDocument: index.html
+  LexLambda:
+    DependsOn:
+    - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Lambda for LexBot configured to work with terminal ui app
+      FunctionName: Lex-Terminal-Bot
+      CodeUri: s3://meyers-anton-template-files/89f7eb3216af6c3779f0ceabe893502c
+      Handler: main.lambda_handler
+      Role:
+        Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/iam-lambda-basic-execution-role-${Stage}
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:
+        Ref: DynamoTableName
+      AttributeDefinitions:
+      - AttributeName: UserId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: UserId
+        KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+  ApiGateway:
+    DependsOn:
+    - WebsiteBucket
+    - LexLambda
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name:
+        Fn::Sub: apigateway-custom-terminal-${Stage}
+      Description: Host custom terminal UI and its APIs
+      EndpointConfiguration:
+        Types:
+        - REGIONAL
+      Mode: overwrite
+      BinaryMediaTypes:
+      - '*~1*'
+      Body:
+        info:
+          version: '1.0'
+          title:
+            Ref: AWS::StackName
+        paths:
+          /:
+            get:
+              responses:
+                '200':
+                  description: 200 response
+                  headers:
+                    Content-Length:
+                      type: string
+                    Content-Type:
+                      type: string
+              x-amazon-apigateway-integration:
+                type: aws
+                httpMethod: GET
+                passthroughBehavior: when_no_match
+                credentials:
+                  Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:s3:path/${BucketName}/${BucketKey}
+                responses:
+                  default:
+                    statusCode: '200'
+                    responseParameters:
+                      method.response.header.Content-Type: integration.response.header.Content-Type
+                      method.response.header.Content-Length: integration.response.header.Content-Length
+          /lex:
+            get:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LexLambda.Arn}/invocations
+              responses: {}
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId:
+        Ref: ApiGateway
+      StageName:
+        Ref: ApiGatewayStageName
+  ApiGatewayStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId:
+        Ref: ApiGatewayDeployment
+      RestApiId:
+        Ref: ApiGateway
+      StageName:
+        Ref: ApiGatewayStageName
+  LexLambdaPermissions:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      FunctionName:
+        Fn::GetAtt:
+        - LexLambda
+        - Arn
+      SourceArn:
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/${ApiGatewayStageName}/GET/lex
+Outputs:
+  WebsiteURL:
+    Value:
+      Fn::GetAtt:
+      - WebsiteBucket
+      - WebsiteURL

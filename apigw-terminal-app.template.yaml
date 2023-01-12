@@ -1,13 +1,22 @@
 ###############################################################
+# aws cloudformation package
+#      --template-file apigw-terminal-app.template.yaml \
+#      --region us-east-1 \
+#      --output-template-file apigw-terminal-app-package.yaml \
+#      --s3-bucket meyers-anton-template-files
+# aws cloudformation package --template-file apigw-terminal-app.template.yaml --region us-east-1 --output-template-file apigw-terminal-app-package.yaml --s3-bucket meyers-anton-template-files
+###############################################################
 # aws cloudformation deploy \
 #     --template-file apigw-terminal-app.template.yaml \
 #     --stack-name apigw-terminal-app \
 #     --profile <your-dev-profile> \
+#     --parameter-overrides $(cat deployment-sheet.parameters) \
 #     --capabilities CAPABILITY_NAMED_IAM \
 #     --region us-east-1
-# aws cloudformation deploy --template-file apigw-terminal-app.template.yaml --stack-name apigw-terminal-app --capabilities CAPABILITY_NAMED_IAM --region us-east-1 --profile default
+# aws cloudformation deploy --s3-bucket meyers-anton-template-files --template-file apigw-terminal-app-package.yaml --stack-name apigw-terminal-app --parameter-overrides $(cat deployment-sheet.parameters) --capabilities CAPABILITY_NAMED_IAM --region us-east-1 --profile default
 ###############################################################
-
+# aws cloudformation describe-stack-events --stack-name apigw-terminal-app >> stack_events.json
+###############################################################
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: Custom Terminal API Application
@@ -21,12 +30,13 @@ Parameters:
     Type: String
     Description: environment
     Default: dev
-  Bucket_Name:
+  BucketName:
     Type: String
     Description: Name of S3 bucket which stores frontend files
-  Bucket_Key:
+  BucketKey:
     Type: String
     Description: Name of S3 file that renders site
+    Default: index.html
   DynamoTableName:
     Type: String
     Description: Name of DynamoDB Table
@@ -45,14 +55,14 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: !Sub iam-s3-bucket-policy-${Stage}
-      Description: !Sub "Policy to fetch objects from the ${Bucket_Name} bucket"
+      Description: !Sub "Policy to fetch objects from the ${BucketKey} bucket"
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Effect: Alow
+          - Effect: Allow
             Action:
               - s3:GetObject
-            Resource: !Sub "arn:${AWS::Partition}:s3:::${Bucket_Name}/*"
+            Resource: !Sub "arn:${AWS::Partition}:s3:::${BucketName}/*"
 
   APIGatewayPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -77,7 +87,6 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-              - dynamodb:BatchGetItem
               - dynamodb:GetItem
               - dynamodb:Query
               - dynamodb:PutItem
@@ -110,7 +119,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       Description: Role used to deploy APIGW lambdas
-      RoleName: iam-lambda-basic-execution-role-${Stage}
+      RoleName: !Sub "iam-lambda-basic-execution-role-${Stage}"
       ManagedPolicyArns:
         - !Ref APIGatewayPolicy
         - !Ref DynamoDBPolicy
@@ -125,31 +134,31 @@ Resources:
             Action:
               - sts:AssumeRole
 
-    ApiGatewayRole:
-      DependsOn:
-        - CloudwatchLogsPolicy
-        - S3TerminalBucketPolicy
-      Type: AWS::IAM::Role
-      Properties:
-        Description: Role for Api Gateway
-        RoleName: !Sub "iam-apigw-terminal-app-${Stage}"
-        ManagedPolicyArns:
-          - !Ref CloudwatchLogsPolicy
-          - !Ref S3TerminalBucketPolicy
-        AssumeRolePolicyDocument:
-          Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Principal:
-                Service: apigateway.amazonaws.com
-              Action:
-                - sts:AssumeRole
+  ApiGatewayRole:
+    DependsOn:
+      - CloudwatchLogsPolicy
+      - S3TerminalBucketPolicy
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Role for Api Gateway
+      RoleName: !Sub "iam-apigw-terminal-app-${Stage}"
+      ManagedPolicyArns:
+        - !Ref CloudwatchLogsPolicy
+        - !Ref S3TerminalBucketPolicy
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action:
+              - sts:AssumeRole
 
   LoggingBucket:
     Type: AWS::S3::Bucket
     Properties:
       AccessControl: LogDeliveryWrite
-      BucketName: !Sub "${Bucket_Name}-Logging"
+      BucketName: !Sub "${BucketName}-logging"
 
   WebsiteBucket:
     DependsOn:
@@ -159,11 +168,10 @@ Resources:
       AccessControl: PublicRead
       LoggingConfiguration:
         DestinationBucketName: !Ref LoggingBucket
-      BucketName: !Sub ${Bucket_Name}
+      BucketName: !Sub ${BucketName}
       WebsiteConfiguration:
         IndexDocument: index.html
         #ErrorDocument: error.html
-      DeletionPolicy: Retain
 
   #SampleBucketPolicy:
   #  Type: AWS::S3::BucketPolicy
@@ -190,9 +198,9 @@ Resources:
     Properties:
       Description: Lambda for LexBot configured to work with terminal ui app
       FunctionName: Lex-Terminal-Bot
-      CodeUri: ./functons/Lex-Terminal-Bot
+      CodeUri: ./functions/Lex-Terminal-Bot
       Handler: main.lambda_handler
-      Role: !Sub arn:aws:iam::${AccountId}:role/iam-lambda-basic-execution-role-${Stage}
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/iam-lambda-basic-execution-role-${Stage}
 
   DynamoDBTable:
     Type: AWS::DynamoDB::Table
@@ -221,7 +229,6 @@ Resources:
       BinaryMediaTypes:
        - "*~1*"
       Body:
-        openapi: "3.1.0"
         info:
           version: "1.0"
           title: !Ref AWS::StackName
@@ -241,7 +248,7 @@ Resources:
                 httpMethod: GET
                 passthroughBehavior: "when_no_match"
                 credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}"
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:s3:path/${Bucket_Name}/${Bucket_Key}"
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:s3:path/${BucketName}/${BucketKey}"
                 responses:
                   default:
                     statusCode: "200"
@@ -253,7 +260,7 @@ Resources:
               x-amazon-apigateway-integration:
                 httpMethod: POST
                 type: aws_proxy
-                uri: !Sub arn:aws:apigateway:${AWS::REGION}:lambda:path/2015-03-31/functions/${LexLambda.Arn}/invocations
+                uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LexLambda.Arn}/invocations
               responses: {}
 
   # API Gateway Deployment

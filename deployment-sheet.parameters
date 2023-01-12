@@ -1,0 +1,3 @@
+BucketName=meyers-anton-terminal-ui-app
+BucketKey=index.html
+DynamoTableName=terminal-app-table
