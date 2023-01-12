@@ -146,7 +146,6 @@ Resources:
     DependsOn:
     - LoggingBucket
     Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
     Properties:
       AccessControl: PublicRead
       LoggingConfiguration:

@@ -261,7 +261,9 @@ Resources:
                 httpMethod: POST
                 type: aws_proxy
                 uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LexLambda.Arn}/invocations
-              responses: {}
+              responses:
+                default:
+                  statusCode: "200"
 
   # API Gateway Deployment
   ApiGatewayDeployment:
