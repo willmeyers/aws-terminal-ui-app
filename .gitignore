@@ -1,3 +1,4 @@
 **/node_modules/
 **/package-lock.json
+ui/build
 stack_events.json
