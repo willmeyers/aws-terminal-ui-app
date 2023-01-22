@@ -195,23 +195,22 @@ Resources:
       - '*~1*'
       Body:
         info:
+          title: Terminal APP
           version: '1.0'
-          title:
-            Ref: AWS::StackName
         paths:
           /:
             get:
               responses:
                 '200':
-                  description: 200 response
+                  description: OK
                   headers:
                     Content-Length:
                       type: string
                     Content-Type:
                       type: string
               x-amazon-apigateway-integration:
-                type: aws
-                httpMethod: GET
+                type: AWS
+                integrationHttpMethod: GET
                 passthroughBehavior: when_no_match
                 credentials:
                   Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}
@@ -224,13 +223,17 @@ Resources:
                       method.response.header.Content-Type: integration.response.header.Content-Type
                       method.response.header.Content-Length: integration.response.header.Content-Length
           /lex:
-            get:
+            post:
+              responses:
+                '200':
+                  description: OK
               x-amazon-apigateway-integration:
-                httpMethod: POST
-                type: aws_proxy
+                integrationHttpMethod: POST
+                type: AWS_PROXY
                 uri:
                   Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LexLambda.Arn}/invocations
-              responses: {}
+                credentials:
+                  Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}
   ApiGatewayDeployment:
     Type: AWS::ApiGateway::Deployment
     Properties:

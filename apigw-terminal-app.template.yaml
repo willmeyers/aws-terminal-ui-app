@@ -228,38 +228,43 @@ Resources:
       Mode: overwrite
       BinaryMediaTypes:
        - "*~1*"
-      paths:
-        "/":
-          get:
-            responses:
-              "200":
-                description: "200 response"
-                headers:
-                  Content-Length:
-                    type: string
-                  Content-Type:
-                    type: string
-            x-amazon-apigateway-integration:
-              type: aws
-              httpMethod: GET
-              passthroughBehavior: "when_no_match"
-              credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}"
-              uri: !Sub "arn:aws:apigateway:${AWS::Region}:s3:path/${BucketName}/${BucketKey}"
+      Body:
+        info:
+          title: Terminal APP
+          version: '1.0'
+        paths:
+          "/":
+            get:
               responses:
-                default:
-                  statusCode: "200"
-                  responseParameters:
-                    method.response.header.Content-Type: "integration.response.header.Content-Type"
-                    method.response.header.Content-Length: "integration.response.header.Content-Length"
-        "/lex":
-          post:
-            x-amazon-apigateway-integration:
-              httpMethod: POST
-              type: aws_proxy
-              uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LexLambda.Arn}/invocations"
-            responses:
-              default:
-                statusCode: "200"
+                "200":
+                  description: OK
+                  headers:
+                    Content-Length:
+                      type: string
+                    Content-Type:
+                      type: string
+              x-amazon-apigateway-integration:
+                type: AWS
+                integrationHttpMethod: GET
+                passthroughBehavior: "when_no_match"
+                credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}"
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:s3:path/${BucketName}/${BucketKey}"
+                responses:
+                  default:
+                    statusCode: "200"
+                    responseParameters:
+                      method.response.header.Content-Type: "integration.response.header.Content-Type"
+                      method.response.header.Content-Length: "integration.response.header.Content-Length"
+          "/lex":
+            post:
+              responses:
+                "200":
+                  description: OK
+              x-amazon-apigateway-integration:
+                integrationHttpMethod: POST
+                type: AWS_PROXY
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LexLambda.Arn}/invocations"
+                credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}"
 
   # API Gateway Deployment
   ApiGatewayDeployment:
