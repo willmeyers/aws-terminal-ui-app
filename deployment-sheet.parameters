@@ -1,3 +1,5 @@
 BucketName=meyers-anton-terminal-ui-app
 BucketKey=index.html
 DynamoTableName=terminal-app-table
+Repository=https://github.com/willmeyers/aws-terminal-ui-app
+AccessToken=${GITHUB_ACCESS_TOKEN}

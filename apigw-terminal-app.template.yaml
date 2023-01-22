@@ -40,6 +40,12 @@ Parameters:
   DynamoTableName:
     Type: String
     Description: Name of DynamoDB Table
+  Repository:
+    Type: String
+    Description: URL of GitHub repo
+  AccessToken:
+    Type: String
+    Description: Personal Access Token for GitHub repo
 
 Globals:
   Function:
@@ -50,7 +56,6 @@ Globals:
         LOG_LEVEL: INFO
 
 Resources:
-
   S3TerminalBucketPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -153,6 +158,26 @@ Resources:
               Service: apigateway.amazonaws.com
             Action:
               - sts:AssumeRole
+  AmplifyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - amplify.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Amplify
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "amplify:*"
+                Resource: "*"
 
   LoggingBucket:
     Type: AWS::S3::Bucket
@@ -172,6 +197,52 @@ Resources:
       WebsiteConfiguration:
         IndexDocument: index.html
         #ErrorDocument: error.html
+
+  # React App Amplify
+  ReactApp:
+    DependsOn:
+      - AmplifyRole
+    Type: AWS::Amplify::App
+    Properties:
+      Name: "meyers-anton-terminal-ui-app"
+      Repository: !Ref Repository
+      AccessToken: !Ref AccessToken
+      AutoBranchCreationConfig:
+        EnableAutoBranchCreation: true
+        EnableAutoBuild: true
+      BuildSpec: |-
+        version: 1.0
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - cd ui
+                - mkdir ./build
+                - npm ci
+            build:
+              commands:
+                - npm run build
+          artifacts:
+            baseDirectory: ./ui/build
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - node_modules/**/*
+      CustomRules:
+        - Source: ui/build/index.html
+          Target: /index.html
+          Status: 200
+      IAMServiceRole: !GetAtt AmplifyRole.Arn
+
+  ReactAppBranch:
+    DependsOn:
+      - ReactApp
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt ReactApp.AppId
+      BranchName: main
+      EnableAutoBuild: false
 
   #SampleBucketPolicy:
   #  Type: AWS::S3::BucketPolicy
@@ -198,7 +269,7 @@ Resources:
     Properties:
       Description: Lambda for LexBot configured to work with terminal ui app
       FunctionName: Lex-Terminal-Bot
-      CodeUri: ./functions/Lex-Terminal-Bot
+      CodeUri: s3://${BucketName}/functions/Lex-Terminal-Bot
       Handler: main.lambda_handler
       Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-lambda-basic-execution-role-${Stage}"
 
@@ -227,11 +298,11 @@ Resources:
           - REGIONAL
       Mode: overwrite
       BinaryMediaTypes:
-       - "*~1*"
+        - "*~1*"
       Body:
         info:
           title: Terminal APP
-          version: '1.0'
+          version: "1.0"
         paths:
           "/":
             get:
@@ -292,3 +363,5 @@ Resources:
 Outputs:
   WebsiteURL:
     Value: !GetAtt WebsiteBucket.WebsiteURL
+  DefaultDomain:
+    Value: !GetAtt ReactApp.DefaultDomain
