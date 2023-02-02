@@ -205,6 +205,7 @@ Resources:
         Ref: APIGateway
   RootMethod:
     DependsOn:
+    - RootResource
     - WebsiteBucket
     Type: AWS::ApiGateway::Method
     Properties:
@@ -212,17 +213,15 @@ Resources:
       HttpMethod: GET
       Integration:
         IntegrationHttpMethod: GET
-        Type: AWS_PROXY
+        Type: HTTP_PROXY
         Uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:s3:path/${BucketName}/${BucketKey}
+          Fn::Sub: https://s3-${AWS::Region}.amazonaws.com/${BucketName}/${BucketKey}
         Credentials:
           Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}
       ResourceId:
         Ref: RootResource
       RestApiId:
         Ref: APIGateway
-      RequestParameters:
-        integration.request.header.Content-Type: "'application/octet-steam'"
   LexResource:
     Type: AWS::ApiGateway::Resource
     Properties:
@@ -235,6 +234,7 @@ Resources:
         Ref: APIGateway
   LexMethod:
     DependsOn:
+    - LexResource
     - LexLambda
     Type: AWS::ApiGateway::Method
     Properties:
@@ -259,8 +259,6 @@ Resources:
     Properties:
       RestApiId:
         Ref: APIGateway
-      StageName:
-        Ref: ApiGatewayStageName
   ApiGatewayStage:
     Type: AWS::ApiGateway::Stage
     Properties:
