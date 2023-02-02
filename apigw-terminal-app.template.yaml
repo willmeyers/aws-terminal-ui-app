@@ -214,7 +214,7 @@ Resources:
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
 
-  ApiGateway:
+  APIGateway:
     DependsOn:
       - WebsiteBucket
       - LexLambda
@@ -228,56 +228,109 @@ Resources:
       Mode: overwrite
       BinaryMediaTypes:
        - "*~1*"
-      Body:
-        info:
-          title: Terminal APP
-          version: '1.0'
-        paths:
-          "/":
-            get:
-              responses:
-                "200":
-                  description: OK
-                  headers:
-                    Content-Length:
-                      type: string
-                    Content-Type:
-                      type: string
-              x-amazon-apigateway-integration:
-                type: AWS
-                integrationHttpMethod: GET
-                passthroughBehavior: "when_no_match"
-                credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}"
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:s3:path/${BucketName}/${BucketKey}"
-                responses:
-                  default:
-                    statusCode: "200"
-                    responseParameters:
-                      method.response.header.Content-Type: "integration.response.header.Content-Type"
-                      method.response.header.Content-Length: "integration.response.header.Content-Length"
-          "/lex":
-            post:
-              responses:
-                "200":
-                  description: OK
-              x-amazon-apigateway-integration:
-                integrationHttpMethod: POST
-                type: AWS_PROXY
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LexLambda.Arn}/invocations"
-                credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}"
+      #Body:
+      #  info:
+      #    title: Terminal APP
+      #    version: '1.0'
+      #  paths:
+      #    "/":
+      #      get:
+      #        responses:
+      #          "200":
+      #            description: OK
+      #            headers:
+      #              Content-Length:
+      #                type: string
+      #              Content-Type:
+      #                type: string
+      #        x-amazon-apigateway-integration:
+      #          type: AWS
+      #          integrationHttpMethod: GET
+      #          passthroughBehavior: "when_no_match"
+      #          credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}"
+      #          uri: !Sub "arn:aws:apigateway:${AWS::Region}:s3:path/${BucketName}/${BucketKey}"
+      #          responses:
+      #            default:
+      #              statusCode: "200"
+      #              responseParameters:
+      #                method.response.header.Content-Type: "integration.response.header.Content-Type"
+      #                method.response.header.Content-Length: "integration.response.header.Content-Length"
+      #    "/lex":
+      #      post:
+      #        responses:
+      #          "200":
+      #            description: OK
+      #        x-amazon-apigateway-integration:
+      #          integrationHttpMethod: POST
+      #          type: AWS_PROXY
+      #          uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LexLambda.Arn}/invocations"
+      #          credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}"
+
+  RootResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt
+        - APIGateway
+        - RootResourceId
+      PathPart: root
+      RestApiId: !Ref APIGateway
+
+  RootMethod:
+    DependsOn:
+      - WebsiteBucket
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: GET
+      Integration:
+        IntegrationHttpMethod: GET
+        Type: AWS_PROXY
+        Uri:  !Sub "arn:aws:apigateway:${AWS::Region}:s3:path/${BucketName}/${BucketKey}"
+        Credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}"
+      ResourceId: !Ref RootResource
+      RestApiId: !Ref APIGateway
+      RequestParameters:
+        integration.request.header.Content-Type: "'application/octet-steam'"
+
+  LexResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt
+        - APIGateway
+        - RootResourceId
+      PathPart: lex
+      RestApiId: !Ref APIGateway
+
+  LexMethod:
+    DependsOn:
+      - LexLambda
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LexLambda.Arn}/invocations"
+        Credentials: !Sub "arn:aws:iam::${AWS::AccountId}:role/iam-apigw-terminal-app-${Stage}"
+      ResourceId: !Ref LexResource
+      RestApiId: !Ref APIGateway
 
   # API Gateway Deployment
   ApiGatewayDeployment:
+    DependsOn:
+      - RootMethod
+      - LexMethod
     Type: AWS::ApiGateway::Deployment
     Properties:
-      RestApiId: !Ref ApiGateway
+      RestApiId: !Ref APIGateway
       StageName: !Ref ApiGatewayStageName
 
   ApiGatewayStage:
     Type: AWS::ApiGateway::Stage
     Properties:
       DeploymentId: !Ref ApiGatewayDeployment
-      RestApiId: !Ref ApiGateway
+      RestApiId: !Ref APIGateway
       StageName: !Ref ApiGatewayStageName
 
   # API Gateway permissions
@@ -287,7 +340,7 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       FunctionName: !GetAtt LexLambda.Arn
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/${ApiGatewayStageName}/GET/lex
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/${ApiGatewayStageName}/GET/lex
 
 Outputs:
   WebsiteURL:
